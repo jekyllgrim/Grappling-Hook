@@ -1,0 +1,2 @@
+ghook/fire	ropefire
+ghook/hit	ropehit
