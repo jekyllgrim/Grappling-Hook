@@ -115,11 +115,11 @@ Class HookProjectile : Actor {
 	vector3 spawnPos;
 	int maxdistance;
 	int flytime;
-	HookControl control;
 	protected double prevspeed;
 	double dragspeed;
 	property dragspeed : dragspeed;
 	property maxdistance : maxdistance;
+
 	Default {
 		HookProjectile.maxdistance 720; //Max distance the hook can cover
 		HookProjectile.dragspeed 25; //How fast the hook drags the player
@@ -131,10 +131,12 @@ Class HookProjectile : Actor {
 		scale 0.4;
 		deathsound "ghook/hit";
 	}
+
 	override void PostBeginPlay() {
 		super.PostBeginPlay();
 		spawnPos = pos; //record the spawn coordinates
 	}
+
 	override void Tick() {
 		super.Tick();
 		if (isFrozen())
@@ -145,74 +147,55 @@ Class HookProjectile : Actor {
 		if (level.Vec3Diff(pos, spawnPos).length() > maxdistance && !inStateSequence(curstate,FindState("Flyback")))
 			SetStateLabel("Flyback");
 	}
+
 	states {
 	Spawn:
 		BAL1 A 1;
 		loop;
 	// The hook hits a wall:
 	Death:
-		TnT1 A 0 A_Scream();
+		TnT1 A 0 {
+			A_Scream();
+			if (tracer && tracer.bSHOOTABLE) {
+				return ResolveState("FlyBack");
+			}
+			return ResolveState(null);
+		}
 		BAL1 A 1 {
 			// If the hook hit something, stop the player's movement:
 			if (target && target.player) {
-				target.speed = 0; //set it to 0
 				target.player.cheats |= CF_FROZEN;
 				// Now set the player's velocity to make them fly towards the wall:
 				target.vel = target.Vec3To(self).Unit() * dragspeed;
+				flytime++;
 				// Check if the player is close enough to the hook:
-				if (Distance3D(target) <= 64) {
-					target.speed = prevspeed; //reset the player's speed
+				if (!target.CheckMove(pos.xy+vel.xy) || target.bNOINTERACTION || target.bNOCLIP || Distance3D(target) <= 64 || flytime > 35*10) {
+					target.player.cheats &= ~CF_FROZEN;
 					destroy(); //destroy the hook
 				}
 			}
 		}
 		wait;
-	// The hook hits a monster:
-	XDeath:
-		TNT1 A 0 A_Scream();
-		BAL1 A 1 {
-			// Give the monster a control item that handles what happens to them:
-			if (tracer) {
-				tracer.GiveInventory("HookControl",1);
-				control = HookControl(tracer.FindInventory("HookControl"));
-				
-				control.master = self;
-			}
-		}
-		goto Flyback;
 	Flyback:
+		TNT1 A 0 {
+			bNOINTERACTION = true;
+		}
 		BAL1 A 1 {
 			if (target) {
 				flytime++;
-				//if (tracer)
 				vel = Vec3To(target).Unit() * 30;
-				if (Distance3D(target) <= 64 || flytime > 35*5) {
-					if (tracer)
-						tracer.TakeInventory("HookControl",1);						
-					destroy();
+				bool canMoveTracer = true;
+				if (tracer) {
+					Vector3 tpos = pos + (0,0, -tracer.height*0.5);
+					tpos.z = Clamp(tpos.z, tracer.floorz, tracer.ceilingz);
+					tracer.SetOrigin(tpos, true);
+					canMoveTracer = tracer.CheckMove(pos.xy+vel.xy);
+				}
+				if (Distance3D(target) <= 64 || flytime > 35*5 || (tracer && !canMoveTracer)) {
+					Destroy();
 				}
 			}
 		}
-		loop;
-	}
-}
-		
-
-Class HookControl : Inventory {
-	Default {
-		+INVENTORY.UNDROPPABLE;
-		+INVENTORY.UNTOSSABLE;
-		+INVENTORY.UNCLEARABLE;
-		+INVENTORY.PERSISTENTPOWER;
-		inventory.maxamount 1;
-	}	
-	override void Tick() {}
-	override void DoEffect() {
-		super.DoEffect();
-		if (!owner || !master) {
-			destroy();
-			return;	
-		}
-		owner.SetOrigin(master.pos-(0,0,owner.default.height*0.5),true);
+		wait;
 	}
 }
