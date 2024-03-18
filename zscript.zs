@@ -155,8 +155,8 @@ Class HookProjectile : Actor {
 		BAL1 A 1 {
 			// If the hook hit something, stop the player's movement:
 			if (target && target.player) {
-				prevspeed = target.speed; //record player's current speed
 				target.speed = 0; //set it to 0
+				target.player.cheats |= CF_FROZEN;
 				// Now set the player's velocity to make them fly towards the wall:
 				target.vel = target.Vec3To(self).Unit() * dragspeed;
 				// Check if the player is close enough to the hook:
